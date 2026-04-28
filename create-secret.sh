@@ -14,16 +14,16 @@
 # placeholder values in place. Only change them locally.
 # ============================================================
 
-MARIADB_ROOT_PASSWORD="YOUR_ROOT_PASSWORD"
+MARIADB_ROOT_PASSWORD="changeme_root"
 MARIADB_DATABASE="ticketdb"
-MARIADB_USER="flaskuser"
-MARIADB_PASSWORD="YOUR_PASSWORD"
+MARIADB_USER="abdi"
+MARIADB_PASSWORD="abdi123"
 
 # These mirror the values above for the Flask app
 DB_HOST="db"
 DB_NAME="ticketdb"
-DB_USER="flaskuser"
-DB_PASSWORD="YOUR_PASSWORD"
+DB_USER="abdi"
+DB_PASSWORD="abdi123"
 
 # ============================================================
 # Do not edit below this line
