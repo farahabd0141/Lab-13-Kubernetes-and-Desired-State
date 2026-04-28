@@ -1,74 +1,128 @@
-  HEAD
-# Docker Lab: Containerizing a Three-Tier Application
-**INET 4031 - Introductions to Systems**
+Lab 13 - Kubernetes Deployment
 
-This lab introduces Docker and Docker Compose by having you containerize a
-real, multi-service application. You will package three components: Apache,
-Flask, and MariaDB. These will be packaged into separate containers and wired together so they function as a complete application.
+In this lab, we took the same three-tier application from Lab 12 (Apache frontend, Flask backend, and MariaDB database) and moved it from Docker Compose into Kubernetes using k3s. The main goal was to understand how Kubernetes manages containers differently by using the idea of desired state, meaning it constantly checks and makes sure everything is running the way it’s supposed to.
 
-The application code and scaffolding are provided. Your job is to complete the Dockerfiles, verify the stack runs correctly, and document your work below.
+What Changed from Lab 12
 
-> **Directions and explanations for this lab are on the repository Wiki.**
-> Refer to the Wiki pages for step-by-step instructions.
+In Lab 12, we used Docker Compose to run multiple containers on one machine. That worked, but if a container stopped or failed, it stayed down until we manually fixed or restarted it. In this lab, Kubernetes handles that automatically. Instead of running containers directly, we define what we want running, and Kubernetes makes sure it stays that way.
 
----
+Setting Up Kubernetes (k3s)
 
-*The sections below are for you to fill out. Replace each placeholder with your own content before submitting. Having a detailed README is the best practice for showing your work in future GitHub repositories.*
+We started by installing k3s on the Ubuntu VM using the install script. After waiting for it to initialize, we verified it was working with:
 
----
+kubectl get nodes
 
-# Project Overview
+This showed the node status as Ready, which confirmed Kubernetes was running correctly.
 
-<!-- Briefly describe what this application does in your own words.
-     What problem does it solve? What does a user interact with? -->
+Namespace and Secret Setup
 
-# Prerequisites
+We created a namespace called ticket-app to keep all of our resources organized:
 
-<!-- List what needs to be installed or configured on the VM before this lab
-     will work. Include Docker, Docker Compose, and anything else required. -->
+kubectl create namespace ticket-app
 
-# Getting Started
+Then we created a Kubernetes Secret to store our database credentials. In Lab 12, we used a .env file, but in Kubernetes we use Secrets instead. The Secret stored values like:
 
-<!-- Explain how a new teammate would bring this stack up from a fresh clone.
-     Walk through every command they need to run, in order. -->
+DB_USER
+DB_PASSWORD
+DB_NAME
+MARIADB_ROOT_PASSWORD
 
-# Configuration
+We used a script (create-secret.sh) to generate and apply the secret, and verified it using:
 
-<!-- Explain the .env file: what it is, what variables it contains,
-     and what a teammate needs to provide that is not in this repository. -->
+kubectl describe secret db-credentials -n ticket-app
+Writing Kubernetes Manifests
 
-# Verification
+We created three YAML files inside the k8s/ directory:
 
-<!-- Describe how to confirm the stack is running correctly.
-     Reference the check script and what a passing run looks like. -->
+db-deployment.yaml
+Created a PersistentVolumeClaim (PVC) so the database data is saved even if the pod restarts
+Created a Deployment for MariaDB
+Created a Service so other pods can connect to it
+app-deployment.yaml
+Deployment for the Flask backend
+Service to allow communication between Flask and the database
+web-deployment.yaml
+Deployment for Apache frontend
+Service using NodePort so we can access it from the browser on port 30080
+Deploying the Application
 
-# Feedback (Optional)
+We deployed everything at once using:
 
-<!-- Do you have any feedback you would like to give us after completing this lab? What are some things you enjoyed? What about others that you felt was lackluster? Or maybe there was something that we missed that you'd love for us to touch on! This will help us improve the INET 4031 lab experience. We appreciate everything we can get!  -->
-
-# Docker-Lab-Containerizing-a-Three-Tier-Application
-  f380ce92d4588e42f42fe2db8a2857ec28609a66
-## Lab 13 - Kubernetes Deployment
-
-In this lab, we took the same application from Lab 12 (Apache, Flask, and MariaDB) and moved it from Docker Compose into Kubernetes using k3s. Instead of manually running containers, Kubernetes now manages everything and keeps it running.
-
-First, we installed k3s and made sure the node was ready. Then we created a namespace called ticket-app and used a Secret to store our database credentials instead of using a .env file.
-
-After that, we created three Kubernetes files for the database, backend, and frontend. We applied everything using:
 kubectl apply -f k8s/
 
-At first, the app had issues connecting to the database, but we fixed it by updating the Secret and restarting the pods. After that, everything started working correctly.
+Kubernetes created all resources including:
 
-We verified it using:
+Deployments
+Pods
+Services
+PersistentVolumeClaim
+
+We verified everything was running with:
+
+kubectl get pods -n ticket-app
+kubectl get services -n ticket-app
+kubectl get pvc -n ticket-app
+Troubleshooting (Important Part)
+
+At first, the application did not work correctly. The Flask app was returning database connection errors. This was caused by:
+
+Incorrect database credentials in the Secret
+The database already being initialized with old credentials
+
+To fix this, we:
+
+Updated the Secret with the correct values from Lab 12
+Deleted the database pod
+Deleted the PVC to fully reset the database
+Re-applied the manifests
+
+This forced MariaDB to reinitialize with the correct user and database settings. After doing this, the connection issue was resolved.
+
+Verifying the Application
+
+We tested the application using:
+
 curl http://localhost:30080/health
 
-It returned:
+The final output was:
+
 {"database":"connected","status":"healthy"}
 
-We also tested self-healing by deleting the Flask pod. Kubernetes automatically created a new one without us doing anything, which shows how it keeps the system running.
+This confirmed:
 
-To deploy:
+Flask can connect to MariaDB
+Apache can reach Flask
+The full application stack is working inside Kubernetes
+Self-Healing (Main Concept)
+
+To test Kubernetes self-healing, we deleted the Flask pod:
+
+kubectl delete pod <app-pod-name> -n ticket-app
+
+Then we watched what happened:
+
+kubectl get pods -n ticket-app -w
+
+After deleting the pod:
+
+The old pod went into Terminating
+Kubernetes automatically created a new pod
+The new pod went from Pending → ContainerCreating → Running
+
+This happened without any manual restart. The Deployment controller noticed the number of running pods dropped below the desired state (1), so it created a new one automatically.
+
+Deployment Command
 kubectl apply -f k8s/
-
-Access the app:
+Accessing the Application
 http://<VM-IP>:30080
+Summary
+
+Overall, this lab showed how Kubernetes improves reliability compared to Docker Compose. Instead of manually managing containers, Kubernetes automatically:
+
+Restarts failed pods
+Maintains the desired state
+Manages networking between services
+Handles storage using PVCs
+
+Even when something breaks or gets deleted, Kubernetes fixes it automatically, which is why it’s used in real production environments.
+
